@@ -16,7 +16,8 @@ CREATE_FIELDS = frozenset({'request_id', 'source', 'cwd', 'model', 'toolsets',
                            'provider', 'base_url', 'reasoning', 'max_turns', 'ignore_rules', 'api_key', 'editor',
                            'yolo', 'safe_mode', 'ignore_user_config',
                            'skills', 'checkpoints', 'accept_hooks', 'pass_session_id', 'follow_profile_config',
-                           'service_tier', 'cwd_explicit', 'run_budget', 'verbose', 'row_cwd', 'client_env'})
+                           'service_tier', 'cwd_explicit', 'run_budget', 'verbose', 'row_cwd', 'client_env',
+                           'kanban_home'})
 # Sections a ``follow_profile_config`` session re-reads from the owning profile's CURRENT config each
 # turn (main's Bot Chat row), credentials included: a frozen key never crosses a profile route change.
 FOLLOW_SECTIONS = ('model', 'providers', 'custom_providers', 'fallback_providers', 'fallback_model', 'model_aliases',
@@ -159,6 +160,9 @@ class LocalSessionPolicy:
     # plain data: an exact retry is judged by them, never by the profile's current ones, and the session's
     # tools run without every toolchain name they cover that the client did not send.
     client_env_rules_json: str | None = None
+    # The kanban home this session's boards live in (the office sidecar's board root), carried from the
+    # client's HERMES_KANBAN_HOME and bound for this session's turns only; None = the gateway's own root.
+    kanban_home: str | None = None
     # An ACP session's edit approval (``session.mutate edit_policy``; main's ACP modes): ``ask`` (Default),
     # ``workspace_session`` (Accept Edits) or ``session`` (Don't Ask). Sensitive paths always ask.
     edit_approval_policy: str = 'ask'
@@ -170,6 +174,14 @@ class LocalSessionPolicy:
         from agent.session_client_env import client_env_scope
         rules = None if self.client_env_rules_json is None else json.loads(self.client_env_rules_json)
         return client_env_scope(self.client_env(), local=not self.client_env_remote, rules=rules)
+
+    def kanban_home_scope(self):
+        """Bind this session's kanban home for the turn's tools; no-op when the session named none."""
+        if self.kanban_home is None:
+            return contextlib.nullcontext()
+        from hermes_cli.kanban_db import bound_kanban_home
+        return bound_kanban_home(Path(self.kanban_home))
+
 
     def config(self, authority=None, *, secrets=True):
         return self.effective(authority, secrets=secrets)[0]
@@ -475,8 +487,12 @@ def build_policy(params, config, *, private_secrets=None, profile_terminal=True,
         except ValueError as exc:
             _refuse('client_env', str(exc))
         rules = json.dumps(rules, sort_keys=True)
+    kanban_home = params.get('kanban_home')
+    if 'kanban_home' in params and (not isinstance(kanban_home, str) or not kanban_home.strip()
+                                    or not Path(kanban_home).is_absolute()):
+        _refuse('kanban_home', 'must be an absolute path string')
     # Values stay out of the request: ``launch_request`` is echoed to every viewer of the session.
-    request = {k: v for k, v in params.items() if k not in {'request_id', 'api_key', 'client_env'}}
+    request = {k: v for k, v in params.items() if k not in {'request_id', 'api_key', 'client_env', 'kanban_home'}}
     request.setdefault('source', 'cli')
     from gateway.session_local_mcp import private_editor_request
     private_editor_request(request, private_secrets)
@@ -487,7 +503,7 @@ def build_policy(params, config, *, private_secrets=None, profile_terminal=True,
                               safe_mode=safe_mode, ignore_user_config=ignore_user_config,
                               coding_posture=coding_posture, client_env_json=client_env,
                               client_env_remote=client_env is not None and not client_local,
-                              client_env_rules_json=rules)
+                              client_env_rules_json=rules, kanban_home=kanban_home)
 
 
 def terminal_uses_host_cwd(terminal):
@@ -1094,7 +1110,7 @@ def policy_scope(policy, *, authority=None):
         auxiliary = policy.config(authority).get('auxiliary') if authority is not None else None
         aux_scope = session_auxiliary_scope(auxiliary) if authority is not None else contextlib.nullcontext()
         with (editor_scope(policy), editor_mcp_scope(authority, policy), aux_scope,
-              policy.client_env_scope()):
+              policy.client_env_scope(), policy.kanban_home_scope()):
             yield
     finally:
         _ACTIVE_POLICY.reset(policy_token)

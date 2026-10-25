@@ -71,6 +71,8 @@ def policy_identity(policy, unhashed=()):
             data.pop(name, None)
     if not data.get('client_env_remote'):
         data.pop('client_env_remote', None)
+    if not data.get('kanban_home'):
+        data.pop('kanban_home', None)
     if data.get('edit_approval_policy', 'ask') == 'ask':
         data.pop('edit_approval_policy', None)
     for name in unhashed:  # _legacy_identities: a field the stamping gateway did not have yet
@@ -85,7 +87,8 @@ def policy_identity(policy, unhashed=()):
 _LATER_POLICY_FIELDS = (('skills_prompt', None),          # 2ee1cd1ebb02
                         ('kanban_json', None),            # c8f8d9ae6384
                         ('safe_mode', False),             # 53d362e18741
-                        ('ignore_user_config', False))    # 53d362e18741
+                        ('ignore_user_config', False),    # 53d362e18741
+                        ('kanban_home', None))
 
 
 def _legacy_identities(policy):

@@ -66,6 +66,14 @@ def client_env_policy(parameters) -> dict:
     return {"client_env": shell_client_env()} if "client_env" in parameters else {}
 
 
+def kanban_home_policy(parameters) -> dict:
+    """``kanban_home`` for a new session: the office sidecar's board root, read from this process's
+    HERMES_KANBAN_HOME and carried to the gateway so the session's kanban tools stay off ~/.hermes.
+    Nothing when the gateway predates the field or the env is unset."""
+    home = os.environ.get("HERMES_KANBAN_HOME", "").strip()
+    return {"kanban_home": home} if home and "kanban_home" in parameters else {}
+
+
 def bypass_launch(args) -> bool:
     """--safe-mode / --ignore-user-config (or their env opt-ins): the owner freezes code defaults,
     the client reads no profile."""
@@ -209,6 +217,7 @@ async def run_gateway_chat(args, emitter=None):
                 policy["title"] = title
             policy.update(env_launch_flags())
             policy.update(client_env_policy(parameters))
+            policy.update(kanban_home_policy(parameters))
             cwd = await asyncio.to_thread(_caller_cwd, args)
             if "cwd" in parameters:
                 policy["cwd"] = cwd
