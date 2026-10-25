@@ -53,6 +53,9 @@ class CanonicalCreateParams(ProfileParams):
     # A shell-launched client's allowlisted environment (HERMES_* behaviour values, toolchain PATH/venv),
     # applied to this session only; never echoed in ``launch_request``.
     client_env: dict[str, str] | None = None
+    # The sidecar's board root (HERMES_KANBAN_HOME): the session's kanban tools stay off ~/.hermes.
+    # Mirrors ``gateway.session_policy.CREATE_FIELDS`` — keep both in sync.
+    kanban_home: str | None = None
 
 
 class CanonicalResumeParams(ProfileParams):
