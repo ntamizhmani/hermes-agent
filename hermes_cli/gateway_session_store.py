@@ -182,12 +182,13 @@ class GatewaySessionStore:
 
     def client_env(self):
         """This shell's ``client_env`` when the gateway takes it (one ``runtime.describe`` per store)."""
-        from hermes_cli.gateway_chat import client_env_policy
+        from hermes_cli.gateway_chat import client_env_policy, kanban_home_policy
         if self._create_parameters is None:
             described = self.call("runtime.describe")
             contract = described.get("session_create") if isinstance(described, dict) else None
             self._create_parameters = list((contract or {}).get("parameters") or [])
-        return client_env_policy(self._create_parameters)
+        return {**client_env_policy(self._create_parameters),
+                **kanban_home_policy(self._create_parameters)}
 
     def branch(self, session_id, title=None):
         """``session.mutate branch``: the gateway forks the whole active transcript into a child it

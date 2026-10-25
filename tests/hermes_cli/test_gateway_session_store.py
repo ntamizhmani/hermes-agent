@@ -420,6 +420,27 @@ def test_create_if_missing_titles_a_gateway_created_session(store, monkeypatch):
     assert params["title"] == "Fresh Named" and params["source"] and params["cwd"]
 
 
+def test_kanban_home_rides_the_classic_cli_session_create(store, monkeypatch, tmp_path):
+    """The office sidecar runs ``chat -c NAME --create-if-missing`` — the classic CLI, whose session is
+    created by ``create_titled_session`` (and ``GatewaySessionStore.create``), not ``run_gateway_chat``
+    where kanban_home was first wired (b8adac72). HERMES_KANBAN_HOME must reach the top-level
+    ``kanban_home`` create parameter or the Manager's cards land on ~/.hermes instead of the office board."""
+    from hermes_cli import gateway_session_store as gss
+    home = tmp_path / "agentos-office"
+    monkeypatch.setenv("HERMES_KANBAN_HOME", str(home))
+    db, client = store
+    monkeypatch.setattr(gss, "session_store", lambda: db)
+    db._create_parameters = ["kanban_home"]  # advertised create contract, sans live gateway
+    db.create({})
+    assert [p for m, p in client.calls if m == "session.create"][-1]["kanban_home"] == str(home)
+    assert gss.create_titled_session("Fresh Named") == "local-new"
+    assert [p for m, p in client.calls if m == "session.create"][-1]["kanban_home"] == str(home)
+    # Unset env (or a gateway predating the field) leaves the parameter out entirely.
+    monkeypatch.delenv("HERMES_KANBAN_HOME")
+    db.create({})
+    assert "kanban_home" not in [p for m, p in client.calls if m == "session.create"][-1]
+
+
 def test_bare_continue_finds_the_last_session_the_cli_created(tmp_path, monkeypatch):
     """Bare ``-c`` (main.py ``_resolve_last_session``) reads main's labels too: a gateway row labelled
     ``local`` that the CLI created is CLI history."""
