@@ -397,10 +397,27 @@ def _require_slug(slug: str) -> str:
     return normed
 
 
+_SESSION_KANBAN_HOME: ContextVar[Optional[Path]] = ContextVar("_SESSION_KANBAN_HOME", default=None)
+
+
+@contextlib.contextmanager
+def bound_kanban_home(home: Path):
+    """Bind a kanban home for the turn in this context only (a session that names its own board root).
+    Outside the scope, ``kanban_home()`` reads the environment again."""
+    token = _SESSION_KANBAN_HOME.set(Path(home))
+    try:
+        yield
+    finally:
+        _SESSION_KANBAN_HOME.reset(token)
+
+
 def kanban_home() -> Path:
-    """``HERMES_KANBAN_HOME`` else ``get_default_hermes_root()``. Shared across
-    profiles BY DESIGN: resolving through the active profile's HERMES_HOME would
-    fork the board per profile and break the dispatcher/worker handoff."""
+    """The session's bound home (``bound_kanban_home``), else ``HERMES_KANBAN_HOME``, else
+    ``get_default_hermes_root()``. Shared across profiles BY DESIGN: resolving through the active
+    profile's HERMES_HOME would fork the board per profile and break the dispatcher/worker handoff."""
+    bound = _SESSION_KANBAN_HOME.get()
+    if bound is not None:
+        return bound
     override = os.environ.get("HERMES_KANBAN_HOME", "").strip()
     if override:
         return Path(override).expanduser()
